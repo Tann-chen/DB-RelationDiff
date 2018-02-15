@@ -4,31 +4,43 @@ import java.util.Comparator;
 
 public class RelationDiff {
 
-    public static void main(String[] args) {
+    public static int expectedBlocksInMemory;
 
+    public static void main(String[] args) {
         System.out.println("Total Memory:" + Runtime.getRuntime().totalMemory() / (1024 * 1024) + "MB");
         System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / (1024 * 1024) + "MB");
 
-        int expectedBlocksInMemory = (int) Math.floor(Runtime.getRuntime().freeMemory() / (4 * 1024));
+        expectedBlocksInMemory = (int) Math.floor(Runtime.getRuntime().freeMemory() / (4 * 1024));
 
-        File file = new File("");
+        File t1 = new File("");  //todo:inputFileName
+        File t2 = new File("");
+        phaseOne(t1,"t1");
+        phaseOne(t2,"t2");
 
-        if (file.exists()) {
 
-            int maxNumOfTuple = 40 * expectedBlocksInMemory;
+    }
+
+
+    /**
+     * The input is T1 and T2 input file, the output is sorted file
+     */
+    public static void phaseOne(File inputFile, String outputPrefix) {
+        if (inputFile.exists()) {
+            int maxNumOfTuple = 40 * expectedBlocksInMemory;  //except the last block
             String[][] sublist;
             boolean flag = true;
+            int sublistCount = 0;
 
             while (flag) {
                 sublist = new String[maxNumOfTuple][7];
 
                 try {
-                    BufferedReader bufferedReader = new BufferedReader(new FileReader(file));
+                    BufferedReader in = new BufferedReader(new FileReader(inputFile));
 
                     int i = 0;
                     for (; i < maxNumOfTuple; i++) {
-                        String line = bufferedReader.readLine();
-                        if (line == null) {
+                        String line = in.readLine();      //every line is a tuple in input file
+                        if (line == null) {        //end of the input file
                             flag = false;
                             break;
                         }
@@ -42,10 +54,10 @@ public class RelationDiff {
                         sublist[i][6] = line.substring(43, 100);
                     }
 
-                    bufferedReader.close();
+                    in.close();
 
 
-                    //sort
+                    //sort the sublist
                     Arrays.sort(sublist, 0, i, new Comparator<String[]>() {   //todo:i-1
                         @Override
                         public int compare(String[] tuple1, String[] tuple2) {
@@ -55,20 +67,20 @@ public class RelationDiff {
 
 
                     //write sublist into file
-                    int sublistCount = 0;
-
-                    String outputFileName = "sublist" + sublistCount + ".txt";
+                    String outputFileName = outputPrefix + "_" + sublistCount + ".txt";
                     BufferedWriter out = new BufferedWriter(new FileWriter(outputFileName));
                     int lineCount = 0;
-                    for (int n = 0; n<i; n++) {
-                        out.append((CharSequence) (sublist[i][0]+sublist[i][2]+ sublist[i][3]+sublist[i][4]+sublist[i][5]+ sublist[i][6]));
-                        lineCount ++;
-                        if(lineCount == 39){
+                    for (int j = 0; j < i; j++) {
+                        out.append((CharSequence) (sublist[j][0] + sublist[j][1] + sublist[j][2] + sublist[j][3] + sublist[j][4] + sublist[j][5] + sublist[j][6]));
+                        lineCount++;
+                        if (lineCount == 40) {
                             lineCount = 0;
                             out.newLine();
                         }
                     }
                     out.close();
+
+                    sublistCount++;
 
                 } catch (IOException e) {
                     e.printStackTrace();
@@ -77,6 +89,19 @@ public class RelationDiff {
 
         }
 
+    }
+
+
+    /**
+     *
+     */
+    public static void phaseTwo(String outputPrefix, int sublistCount){
+        //need one output block-size buffer
+        int inputBufferBlocks = (int)Runtime.getRuntime().freeMemory() / (4 * 1024)-1;
+
+
 
     }
+
+
 }
