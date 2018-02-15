@@ -14,8 +14,8 @@ public class RelationDiff {
 
         File t1 = new File("");  //todo:inputFileName
         File t2 = new File("");
-        phaseOne(t1,"t1");
-        phaseOne(t2,"t2");
+        int t1SubLists = phaseOne(t1,"t1");
+        int t2SubLists = phaseOne(t2,"t2");
 
 
     }
@@ -24,12 +24,13 @@ public class RelationDiff {
     /**
      * The input is T1 and T2 input file, the output is sorted file
      */
-    public static void phaseOne(File inputFile, String outputPrefix) {
+    public static int phaseOne(File inputFile, String outputPrefix) {
+        int sublistCount = 0;
+
         if (inputFile.exists()) {
             int maxNumOfTuple = 40 * expectedBlocksInMemory;  //except the last block
             String[][] sublist;
             boolean flag = true;
-            int sublistCount = 0;
 
             while (flag) {
                 sublist = new String[maxNumOfTuple][7];
@@ -89,6 +90,8 @@ public class RelationDiff {
 
         }
 
+        return sublistCount;
+
     }
 
 
@@ -97,7 +100,44 @@ public class RelationDiff {
      */
     public static void phaseTwo(String outputPrefix, int sublistCount){
         //need one output block-size buffer
-        int inputBufferBlocks = (int)Runtime.getRuntime().freeMemory() / (4 * 1024)-1;
+        int inputBufferBlocks = (int)Runtime.getRuntime().freeMemory() / (4 * 1024) - 1;
+        //average blocks for every sublist
+        int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / sublistCount);
+        //sublists[0]: sublist; sublists[0][0]: tuple; sublists[0][0][0]:id filed;
+        String[][][] sublists = new String[sublistCount][avgDistributedBlocks * 40][7];
+
+        for(int i=0; i<sublistCount; i++){
+            try {
+                BufferedReader in = new BufferedReader(new FileReader(outputPrefix + "_" + i +".txt"));
+                for(int b=0; b<avgDistributedBlocks; b++){
+                    String tempBlock = in.readLine();   //one block per line
+                    int pointer = 0;  //point to current char;
+                    int currentTuple = 0;
+                    while (tempBlock.charAt(pointer) !='\r'){
+                        String tempTuple = tempBlock.substring(pointer,pointer + 100);
+                        sublists[i][b * 40 + currentTuple][0] = tempTuple.substring(0, 8);
+                        sublists[i][b * 40 + currentTuple][1] = tempTuple.substring(8, 18);
+                        sublists[i][b * 40 + currentTuple][2] = tempTuple.substring(18, 28);
+                        sublists[i][b * 40 + currentTuple][3] = tempTuple.substring(28, 31);
+                        sublists[i][b * 40 + currentTuple][4] = tempTuple.substring(31, 34);
+                        sublists[i][b * 40 + currentTuple][5] = tempTuple.substring(34, 43);
+                        sublists[i][b * 40 + currentTuple][6] = tempTuple.substring(43, 100);
+                        pointer +=100;
+                    }
+                }
+
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+
+            //merging
+            
+
+
+
+
+
+        }
 
 
 
