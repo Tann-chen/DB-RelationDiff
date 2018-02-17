@@ -1,3 +1,5 @@
+*.txt
+
 # Compiled class file
 *.class
 
@@ -24,3 +26,8 @@ hs_err_pid*
 #IDEA
 .idea
 DB-RelationDiff.iml
+
+# Eclipse
+.classpath
+.project
+/bin/
