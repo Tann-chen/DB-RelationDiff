@@ -1,56 +1,73 @@
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 
 public class RelationDiffByte {
 
+	public static boolean DEBUG = true;
 	public static int maxNumOfTuple;
 	public static int expectedBlocksInMemory;
 	public static final float K = 1024.0f;
 	public static final int TUPLESPB = 40;
 	public static final int TUPLEBYTE = 101;
 	public static final int BLOCKSIZE = TUPLESPB * TUPLEBYTE;// one block has 40 tuples, 101byte for one tuple
-	public static final int RUNNINGMEMORY = 1290; // kb
-	public static final int RUNNINGMEMORY_PHRASE2 = RUNNINGMEMORY+40;
+	public static float RUNNINGMEMORY = 1290f; // kb
+	public static float RUNNINGMEMORY_PHASE2 = RUNNINGMEMORY+40;
 
+	public static int iocost = 0;
+	
 	public static void main(String[] args) {
 		System.out.println("Total Memory:" + Runtime.getRuntime().totalMemory() / (K * K) + "MB");
-		System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / (K * K) + "MB");
-
+		float freeMemory = Runtime.getRuntime().freeMemory() / (K * K);
+		System.out.println("Free Memory:" + freeMemory + "MB");
+		if(freeMemory > 5) {
+			RUNNINGMEMORY *= 1.4;
+			RUNNINGMEMORY_PHASE2 = RUNNINGMEMORY*0.8f;
+		}
 		expectedBlocksInMemory = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY * K) / BLOCKSIZE);
 		maxNumOfTuple = TUPLESPB * expectedBlocksInMemory;
-		String file1 = "";
-		String file2 = "";
-		if (args.length > 1) {
-			file1 = args[0];
-			file2 = args[1];
-		}
-		int t1SubLists = phaseOne(file1, "t1");
+		long startTime = System.currentTimeMillis();
+		int t1SubLists = phaseOne("E:\\bag1.txt", "t1");
 		phaseTwo("t1", t1SubLists);
-		
-		int t2SubLists = phaseOne(file2, "t2");
+		freeMemory = Runtime.getRuntime().freeMemory() / (K * K);
+		if(freeMemory > 5) {
+			expectedBlocksInMemory = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY * K) / BLOCKSIZE);
+			maxNumOfTuple = TUPLESPB * expectedBlocksInMemory;
+		}
+		int t2SubLists = phaseOne("E:\\bag2.txt", "t2");
+		if(freeMemory > 5) {
+			RUNNINGMEMORY_PHASE2*=1.7;
+			expectedBlocksInMemory = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY * K) / BLOCKSIZE);
+			maxNumOfTuple = TUPLESPB * expectedBlocksInMemory;
+		}
 		phaseTwo("t2", t2SubLists);
+		recordTime(startTime, "Total");
+		System.out.println("Total I/O Cost is:" + iocost + " times R/W");
 	}
 
 	/**
 	 * The input is T1 and T2 input file, the output is sorted file
 	 */
 	public static int phaseOne(String inputFile, String outputPrefix) {
-		System.gc();
 		float startMemory = Runtime.getRuntime().freeMemory() / K;
 		long startTime = System.currentTimeMillis();
 		int sublistCount = 0;
 		int eof = 0;
 		int lines = 0;
-		System.out.println("Max tuple to fill:"+maxNumOfTuple);
+		if(DEBUG) {
+			System.out.println("*******************"+ outputPrefix + " PHASE ONE*********************************");
+			System.out.println("Max tuple to fill:"+maxNumOfTuple);
+		}
 
 		byte[][] sublistbyte = new byte[maxNumOfTuple][TUPLEBYTE];
-		System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / K + "KB");
+		if(DEBUG) {
+			System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / K + "KB");
+		}
 		try {
 			FileInputStream ios = new FileInputStream(inputFile);
 			while (eof != -1) {
 				eof = ios.read(sublistbyte[lines++]);
+				iocost++;
 				if (lines == maxNumOfTuple || eof == -1) {
 					if(eof == -1) {
 						lines--;
@@ -74,6 +91,7 @@ public class RelationDiffByte {
 					int lineCount = 0;
 					for (int j = 0; j < lines; j++) {
 						out.write(sublistbyte[j], 0, TUPLEBYTE - 1);
+						iocost++;
 						lineCount++;
 						if (lineCount == TUPLESPB) {
 							lineCount = 0;
@@ -82,15 +100,23 @@ public class RelationDiffByte {
 					}
 					lines = 0;
 					out.close();
-					System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / K + "KB");
+					out = null;
+					if(DEBUG) {
+						System.out.println("Finish " + sublistCount + "sublist, Free Memory:" + Runtime.getRuntime().freeMemory() / K + "KB");
+					}
 				}
 			}
 			ios.close();
+			ios = null;
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		recordTime(startTime, "phase 1");
-		recordMemory(startMemory, "phase 1");
+		if(DEBUG) {
+			recordTime(startTime, outputPrefix + " phase 1");
+			recordMemory(startMemory, outputPrefix + " phase 1");
+		}
+		sublistbyte = null;
+		System.gc();
 		return sublistCount;
 	}
 
@@ -113,9 +139,12 @@ public class RelationDiffByte {
 		float startMemory = Runtime.getRuntime().freeMemory() / K;
 		long startTime = System.currentTimeMillis();
 		// need one output block-size buffer
-		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - (RUNNINGMEMORY_PHRASE2) * K) / BLOCKSIZE)
+		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - (RUNNINGMEMORY_PHASE2) * K) / BLOCKSIZE)
 				- 1;
-		System.out.println("Max Blocks to fill:"+inputBufferBlocks);
+		if(DEBUG) {
+			System.out.println("++++++++++++++++++++++"+ outputPrefix + " PHASE TWO+++++++++++++++++++++++++++++++++");
+			System.out.println("Max Blocks to fill:"+inputBufferBlocks);
+		}
 		// average blocks for every sublist
 		int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / sublistCount);
 		// declare output buffer
@@ -129,7 +158,7 @@ public class RelationDiffByte {
 				mergeInput[i] = new FileInputStream(outputPrefix + "_" + i + ".txt");
 			}
 			boolean finish=false;
-			int phrase2_step = 0;
+			int phase2_step = 0;
 			FileOutputStream out = new FileOutputStream(outputPrefix + "_sorted.txt");
 			while(!finish) {
 				tuplesCount = new int[sublistCount];
@@ -137,6 +166,7 @@ public class RelationDiffByte {
 					int tuples = 0;
 					while (sublistEof[i] != -1) {
 						sublistEof[i] = mergeInput[i].read(inputBuffer[i][tuples++]);
+						iocost++;
 						if(sublistEof[i] == -1) {
 							tuples--;
 							tuplesCount[i] = tuples;
@@ -158,9 +188,10 @@ public class RelationDiffByte {
 				if(sum == 0) {
 					break;
 				}
-				
-				recordTime(startTime, "phase 2-"+phrase2_step+" time fill");
-				recordMemory(startMemory, "phase 2-"+phrase2_step+" time fill");
+				if(DEBUG) {
+					recordTime(startTime, outputPrefix + " phase 2-"+phase2_step+" time fill");
+					recordMemory(startMemory, outputPrefix + " phase 2-"+phase2_step+" time fill");
+				}
 				// merge
 				int outputBufferOffset = 0;
 				int[] sublistIndex = new int[sublistCount];
@@ -207,10 +238,13 @@ public class RelationDiffByte {
 						for (int j = 0; j < outputBufferOffset; j++) {
 							out.write(outputBuffer[j], 0, TUPLEBYTE - 1);
 							out.write('\n');
+							iocost++;
 						}
 						outputBufferOffset = 0;
 					}
 				}
+				sublistIndex = null;
+				outputBuffer = null;
 				finish = true;
 				for (int i = 0; i < sublistCount; i++) {
 					if(sublistEof[i] != -1) {
@@ -218,21 +252,28 @@ public class RelationDiffByte {
 						break;
 					}
 				}
-				phrase2_step++;
+				phase2_step++;
 			}
 			out.close();
+			out = null;
 			for (int i = 0; i < sublistCount; i++) {
-				mergeInput[i].close();;
+				mergeInput[i].close();
+				mergeInput[i] = null;
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
+		inputBuffer = null;
+		tuplesCount = null;
+		sublistEof = null;
+		mergeInput = null;
+		System.gc();
 	}
 
 	public static void recordTime(long startTime, String function) {
 		long endTime = System.currentTimeMillis();
 		long duration = (endTime - startTime);
-		System.out.println(function + " duration time:" + duration + " milliseconds");
+		System.out.println(function + " time is:" + duration + " milliseconds");
 	}
 
 	public static void recordMemory(float start, String funciont) {
