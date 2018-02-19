@@ -1,6 +1,7 @@
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.util.Arrays;
 
 public class RelationDiffByte {
 
@@ -12,7 +13,8 @@ public class RelationDiffByte {
 	public static final int TUPLEBYTE = 101;
 	public static final int BLOCKSIZE = TUPLESPB * TUPLEBYTE;// one block has 40 tuples, 101byte for one tuple
 	public static float RUNNINGMEMORY = 1290f; // kb
-	public static float RUNNINGMEMORY_PHASE2 = RUNNINGMEMORY+40;
+	public static float RUNNINGMEMORY_PHASE2 = RUNNINGMEMORY+40; 	//kb
+	public static float RUNNINGMEMORY_DIFF = RUNNINGMEMORY+40;
 
 	public static int iocost = 0;
 	
@@ -139,8 +141,7 @@ public class RelationDiffByte {
 		float startMemory = Runtime.getRuntime().freeMemory() / K;
 		long startTime = System.currentTimeMillis();
 		// need one output block-size buffer
-		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - (RUNNINGMEMORY_PHASE2) * K) / BLOCKSIZE)
-				- 1;
+		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY_PHASE2 * K) / BLOCKSIZE) - 1;
 		if(DEBUG) {
 			System.out.println("++++++++++++++++++++++"+ outputPrefix + " PHASE TWO+++++++++++++++++++++++++++++++++");
 			System.out.println("Max Blocks to fill:"+inputBufferBlocks);
@@ -161,7 +162,7 @@ public class RelationDiffByte {
 			int phase2_step = 0;
 			FileOutputStream out = new FileOutputStream(outputPrefix + "_sorted.txt");
 			while(!finish) {
-				tuplesCount = new int[sublistCount];
+				//tuplesCount = new int[sublistCount];
 				for (int i = 0; i < sublistCount; i++) {
 					int tuples = 0;
 					while (sublistEof[i] != -1) {
@@ -214,8 +215,7 @@ public class RelationDiffByte {
 					}
 					for (int j = 0; j < sublistCount; j++) {
 //						System.out.println(new String(inputBuffer[j][sublistIndex[j]])+new String(outputBuffer[outputBufferOffset]));
-						if (sublistIndex[j] < tuplesCount[j]
-								&& compare(inputBuffer[j][sublistIndex[j]], outputBuffer[outputBufferOffset]) < 0) {
+						if (sublistIndex[j] < tuplesCount[j] && compare(inputBuffer[j][sublistIndex[j]], outputBuffer[outputBufferOffset]) < 0) {
 							outputBuffer[outputBufferOffset] = inputBuffer[j][sublistIndex[j]];
 							thisSublist = j;
 						}
@@ -281,5 +281,136 @@ public class RelationDiffByte {
 		System.out.println("Memory used:" + used + "KB");
 		System.out.println("Total Memory:" + Runtime.getRuntime().totalMemory() / (K * K) + "MB");
 		System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / (K * K) + "MB\n");
+	}
+
+
+	public static void compareDiff(String t1Prefix, String t2Prefix){
+		System.gc();
+		float startMemory = Runtime.getRuntime().freeMemory() / K;
+		long startTime = System.currentTimeMillis();
+		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY_DIFF * K) / BLOCKSIZE);
+		if(DEBUG) {
+			System.out.println("=========================== COMPARE DIFF ===========================");
+			System.out.println("Max Blocks to fill:"+inputBufferBlocks);
+		}
+
+		try {
+			FileInputStream ios1 = new FileInputStream(t1Prefix + "_sorted.txt");
+			FileInputStream ios2 = new FileInputStream(t2Prefix + "_sorted.txt");
+			FileOutputStream out = new FileOutputStream("result.txt");
+
+			int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / 2);
+			//t1
+			byte[][] t1Buffer = new byte[avgDistributedBlocks * TUPLESPB][TUPLEBYTE-1];
+			//t2
+			byte[][] t2Buffer = new byte[avgDistributedBlocks * TUPLESPB][TUPLEBYTE-1];
+
+			int lenOft1Buffer;
+			int lenOft2Buffer;
+
+			//first load
+			lenOft1Buffer = loadFile(t1Buffer,ios1);
+			lenOft2Buffer = loadFile(t2Buffer,ios2);
+
+			//compare
+			int currentT1 = 0;	//pointer
+			int currentT2 = 0;
+
+			while (currentT1 < lenOft1Buffer && currentT2 < lenOft2Buffer){
+				if(compare(t1Buffer[currentT1], t2Buffer[currentT2]) > 0){
+					byte[] tempT2 = t2Buffer[currentT2];
+					out.write(tempT2);
+					out.write((byte)0);
+					out.write('\n');
+					currentT2 ++;
+					tempT2 = null;
+				}
+				else if(compare(t1Buffer[currentT1], t2Buffer[currentT2]) < 0){
+					byte[] tempT1 = t1Buffer[currentT1];
+					int counter = 1;
+					while (compare(tempT1,t1Buffer[++currentT1]) == 0){
+						counter++;
+					}
+					out.write(tempT1);
+					out.write((byte)counter);
+					out.write('\n');
+					currentT1++;
+
+					tempT1 = null;
+					counter = 0;
+				}
+				else{	//equal
+					byte[] tempT1 = t1Buffer[currentT1];
+					int counter1 = 1;
+					while (compare(tempT1,t1Buffer[++currentT1]) == 0){
+						counter1++;
+					}
+
+					byte[] tempT2 = t2Buffer[currentT2];
+					int counter2 = 1;
+					while (compare(tempT2,t2Buffer[++currentT2]) == 0){
+						counter2++;
+					}
+
+					out.write(tempT1);
+					if(counter1 > counter2){
+						out.write((byte)(counter1-counter2));
+					}else{
+						out.write((byte)0);
+					}
+					out.write('\n');
+					currentT1++;
+					currentT2++;
+
+					tempT1 = null;
+					tempT2 = null;
+					System.gc();
+				}
+
+
+
+				//check exhausted buffer case
+				if(currentT1 == lenOft1Buffer){
+					lenOft1Buffer =loadFile(t1Buffer,ios1);
+					currentT1 = 0;
+
+					//trick
+					if(lenOft1Buffer < t1Buffer.length){
+						byte[] biggest = new byte[100];
+						Arrays.fill(biggest,Byte.MAX_VALUE);
+						t1Buffer[lenOft1Buffer] = biggest;
+						lenOft1Buffer += 1;
+					}
+				}
+
+				if(currentT2 == lenOft2Buffer){
+					lenOft2Buffer = loadFile(t2Buffer,ios2);
+					currentT2 = 0;
+
+					//trick
+					if(lenOft2Buffer < t2Buffer.length){
+						byte[] biggest = new byte[100];
+						Arrays.fill(biggest,Byte.MAX_VALUE);
+						t2Buffer[lenOft2Buffer] = biggest;
+						lenOft2Buffer += 1;
+					}
+				}
+			}
+
+		}catch (IOException e){
+			System.out.println(e.getMessage());
+		}
+	}
+
+	public static int loadFile(byte[][] buffer, FileInputStream ios) throws IOException{
+		int eof = 0;
+		int i = 0;
+		for(; i<buffer.length; i++){
+			if(eof == -1){
+				break;
+			}
+			eof = ios.read(buffer[i]);
+		}
+		return i;
 	}
 }
