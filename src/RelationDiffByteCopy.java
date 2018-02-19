@@ -276,6 +276,12 @@ public class RelationDiffByteCopy {
 					counter = 0;
 				}
 				else{	//equal
+
+					if(isMaxByte(t1Buffer[currentT1])){
+						System.out.println("=========================== END OF COMPARE DIFF ===========================");
+						break;
+					}
+
 					byte[] tempT1 = t1Buffer[currentT1];
 					int counter1 = 1;
 					currentT1 += 1;
@@ -344,6 +350,8 @@ public class RelationDiffByteCopy {
 
 
 
+
+
 	public static void recordTime(long startTime, String function) {
 		long endTime = System.currentTimeMillis();
 		long duration = (endTime - startTime);
@@ -372,6 +380,19 @@ public class RelationDiffByteCopy {
 
 		return 0;
 	}
+
+
+	public static boolean isMaxByte(byte[] byt){
+		boolean flag = true;
+		for(byte b:byt){
+			if(b != Byte.MAX_VALUE){
+				flag = false;
+			}
+		}
+
+		return flag;
+	}
+
 
 
 	/**
