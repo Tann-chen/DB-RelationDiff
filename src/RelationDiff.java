@@ -3,18 +3,17 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
-public class RelationDiffByteCopy {
+public class RelationDiff {
 
-	public static boolean DEBUG = true;
-	public static int maxNumOfTuple;
-	public static int expectedBlocksInMemory;
+	public static boolean DEBUG = false;
+	public static int MAX_TUPLES;
+	public static int MAX_BLOCKS;
 	public static final float K = 1024.0f;
-	public static final int TUPLESPB = 40;
-	public static final int TUPLEBYTE = 100;
-	public static final int BLOCKSIZE = TUPLESPB * TUPLEBYTE;// one block has 40 tuples, 101byte for one tuple
-	public static float RUNNINGMEMORY = 1290f; // kb
-	public static float RUNNINGMEMORY_PHASE2 = RUNNINGMEMORY+40; 	//kb
-	public static float RUNNINGMEMORY_DIFF = RUNNINGMEMORY;		//kb
+	public static final int TUPLES_OF_BLOCK = 40;
+	public static final int BYTES_OF_TUPLE = 101;
+	public static final int BLOCK_SIZE = TUPLES_OF_BLOCK * BYTES_OF_TUPLE;// one block has 40 tuples, 101byte for one tuple
+	public static final byte[] MAX_ID = "99999999Lelia     Lopez     110008560319893Peep Key,Neffini,YT,X0B 0J4                              \n".getBytes();
+	public static float RUNNING_MEMORY = 1024; // kb
 
 	public static int iocost = 0;
 	
@@ -22,32 +21,25 @@ public class RelationDiffByteCopy {
 		System.out.println("Total Memory:" + Runtime.getRuntime().totalMemory() / (K * K) + "MB");
 		float freeMemory = Runtime.getRuntime().freeMemory() / (K * K);
 		System.out.println("Free Memory:" + freeMemory + "MB");
-		if(freeMemory > 5) {
-			RUNNINGMEMORY *= 1.4;
-			RUNNINGMEMORY_PHASE2 = RUNNINGMEMORY*0.8f;
+		if(freeMemory > 7) {
+			RUNNING_MEMORY *= 3.4;
+		} else {
+			RUNNING_MEMORY *= 1.7;
 		}
-		expectedBlocksInMemory = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY * K) / BLOCKSIZE);
-		maxNumOfTuple = TUPLESPB * expectedBlocksInMemory;
+		MAX_BLOCKS = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNING_MEMORY * K) / BLOCK_SIZE);
+		MAX_TUPLES = TUPLES_OF_BLOCK * MAX_BLOCKS;
+		
 		long startTime = System.currentTimeMillis();
-		int t1SubLists = phaseOne("E:\\bag1.txt", "t1");
+		int t1SubLists = phaseOne("bag1.txt", "t1");
 		phaseTwo("t1", t1SubLists);
-		freeMemory = Runtime.getRuntime().freeMemory() / (K * K);
-		if(freeMemory > 5) {
-			expectedBlocksInMemory = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY * K) / BLOCKSIZE);
-			maxNumOfTuple = TUPLESPB * expectedBlocksInMemory;
-		}
-		int t2SubLists = phaseOne("E:\\bag2.txt", "t2");
-		if(freeMemory > 5) {
-			RUNNINGMEMORY_PHASE2*=1.7;
-			expectedBlocksInMemory = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY * K) / BLOCKSIZE);
-			maxNumOfTuple = TUPLESPB * expectedBlocksInMemory;
-		}
+		int t2SubLists = phaseOne("bag2.txt", "t2");
 		phaseTwo("t2", t2SubLists);
+		
+//		compareDiff("t1","t2");
 		recordTime(startTime, "Total");
 		System.out.println("Total I/O Cost is:" + iocost + " times R/W");
 	}
-
-
+	
 	/**
 	 * The input is T1 and T2 input file, the output is sorted file
 	 */
@@ -55,53 +47,45 @@ public class RelationDiffByteCopy {
 		float startMemory = Runtime.getRuntime().freeMemory() / K;
 		long startTime = System.currentTimeMillis();
 		int sublistCount = 0;
-		int eof = 0;
+		int readLength = 0;
 		int lines = 0;
 		if(DEBUG) {
-			System.out.println("*******************"+ outputPrefix + " PHASE ONE *********************************");
-			System.out.println("Max tuple to fill:" + maxNumOfTuple);
+			System.out.println("**************************"+ outputPrefix + " PHASE ONE **************************");
+			System.out.println("Max tuples to fill:" + MAX_TUPLES);
 		}
 
-		byte[][] sublistbyte = new byte[maxNumOfTuple][TUPLEBYTE];
+		byte[][] sublistbyte = new byte[MAX_TUPLES][BYTES_OF_TUPLE];
+		byte[] blockBuffer = new byte[TUPLES_OF_BLOCK*BYTES_OF_TUPLE];
 		if(DEBUG) {
 			System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / K + "KB");
 		}
-
 		try {
 			FileInputStream ios = new FileInputStream(inputFile);
-			while (eof != -1) {
-				eof = ios.read(sublistbyte[lines]);
-				ios.skip(1); 	//skip every '\n' end of lines
-				lines++;
-
-				//one block one io
-				if(lines % TUPLESPB == 0 || eof == -1){
-					iocost++;
+			while ((readLength = ios.read(blockBuffer))!= -1) {
+				iocost++;
+				for(int i=0;i<readLength/BYTES_OF_TUPLE;i++) {
+					System.arraycopy(blockBuffer, BYTES_OF_TUPLE*i, sublistbyte[lines++], 0, BYTES_OF_TUPLE);
 				}
-
-				//sorting
-				if (lines == maxNumOfTuple || eof == -1) {
+				if (lines == MAX_TUPLES || readLength < blockBuffer.length) {
 					// sort the sublist
-					QuickSortTupleByte.quicksort(sublistbyte, 0, lines - 1);
+					QuickSort.quicksort(sublistbyte, 0, lines - 1);
 					FileOutputStream out = new FileOutputStream(outputPrefix + "_" + sublistCount++ + ".txt");
 					int lineCount = 0;
-					for (int j = 0; j < lines; j++) {
-						out.write(sublistbyte[j], 0, TUPLEBYTE);
+					while(lineCount < lines) {
+						System.arraycopy(sublistbyte[lineCount], 0, blockBuffer, BYTES_OF_TUPLE*(lineCount%TUPLES_OF_BLOCK), BYTES_OF_TUPLE);
 						lineCount++;
-						if (lineCount == TUPLESPB) {
-							lineCount = 0;
-							out.write('\n');
-							iocost++;
+						if(lineCount%TUPLES_OF_BLOCK == 0) {
+							out.write(blockBuffer, 0, BYTES_OF_TUPLE*TUPLES_OF_BLOCK);
+						} else if(lineCount == lines) {
+							out.write(blockBuffer, 0, BYTES_OF_TUPLE*(lineCount%TUPLES_OF_BLOCK));
 						}
+						iocost++;
 					}
-
-					//gc
 					lines = 0;
-					lineCount = 0;
 					out.close();
 					out = null;
 					if(DEBUG) {
-						System.out.println("Finish " + sublistCount + "sublist, Free Memory:" + Runtime.getRuntime().freeMemory() / K + "KB");
+						System.out.println("Finish " + sublistCount + " sublist, Free Memory:" + Runtime.getRuntime().freeMemory() / K + "KB");
 					}
 				}
 			}
@@ -114,102 +98,133 @@ public class RelationDiffByteCopy {
 			recordTime(startTime, outputPrefix + " phase 1");
 			recordMemory(startMemory, outputPrefix + " phase 1");
 		}
-
+		blockBuffer = null;
 		sublistbyte = null;
 		System.gc();
 		return sublistCount;
 	}
 
-
 	/**
 	 * The method is to implement the process of phase 2
 	 */
 	public static void phaseTwo(String outputPrefix, int sublistCount) {
+		System.gc();
 		float startMemory = Runtime.getRuntime().freeMemory() / K;
 		long startTime = System.currentTimeMillis();
-
 		// need one output block-size buffer
-		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY_PHASE2 * K) / BLOCKSIZE);
-
+		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNING_MEMORY * K) / BLOCK_SIZE) - 1;
 		if(DEBUG) {
-			System.out.println("++++++++++++++++++++++"+ outputPrefix + " PHASE TWO +++++++++++++++++++++++++++++++++");
+			System.out.println("++++++++++++++++++++++++++"+ outputPrefix + " PHASE TWO ++++++++++++++++++++++++++");
 			System.out.println("Max Blocks to fill:"+inputBufferBlocks);
 		}
-
 		// average blocks for every sublist
 		int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / sublistCount);
 		// declare output buffer
-		byte[][][] inputBuffer = new byte[sublistCount][avgDistributedBlocks * TUPLESPB][TUPLEBYTE];
-		int[] lengthOfBuffer = new int[sublistCount];
-		int[] currentIndex = new int[sublistCount];
-		boolean[] eofFlag = new boolean[sublistCount];
-		int endCounter = 0;
-
+		byte[][][] inputBuffer = new byte[sublistCount][avgDistributedBlocks * TUPLES_OF_BLOCK][BYTES_OF_TUPLE];
+		byte[] blockBuffer = new byte[TUPLES_OF_BLOCK*BYTES_OF_TUPLE];
+		int tuplesCount[] = new int[sublistCount];
+		int readLength[] = new int[sublistCount];
 		FileInputStream[] mergeInput = new FileInputStream[sublistCount];
-
+		// merge
+		int outputBufferOffset = 0;
+		int[] sublistIndex = new int[sublistCount];
+		byte[][] outputBuffer = new byte[TUPLES_OF_BLOCK][];
+		boolean fillSublist = false;
+		
 		try {
 			for (int i = 0; i < sublistCount; i++) {
 				mergeInput[i] = new FileInputStream(outputPrefix + "_" + i + ".txt");
 			}
+			boolean finish=false;
+			int phase2FillCount = 0;
 			FileOutputStream out = new FileOutputStream(outputPrefix + "_sorted.txt");
-
-
-			//first load
-			for(int i=0; i<sublistCount; i++){
-				lengthOfBuffer[i] = loadFile(inputBuffer[i],mergeInput[i]);
-				currentIndex[i] = 0;
-				eofFlag[i] = false;
-			}
-
-			//merge
-			while (true){
-				//find smallest
-				byte[] smallest = new byte[100];
-				int smallestIndex = 0;
-				Arrays.fill(smallest,Byte.MAX_VALUE);
-
-				for(int i=0; i<sublistCount; i++){
-					if(eofFlag[i]){
+			while(!finish) {
+				for (int i = 0; i < sublistCount; i++) {
+					if(tuplesCount[i] != 0 || readLength[i] == -1) {
 						continue;
 					}
-
-					if(compare(smallest,inputBuffer[i][currentIndex[i]]) > 0){
-						smallest = inputBuffer[i][currentIndex[i]];
-						smallestIndex = i;
+					int tuples = 0;
+					while ((readLength[i] = mergeInput[i].read(blockBuffer))!= -1) {
+						iocost++;
+						for(int t=0;t<readLength[i]/BYTES_OF_TUPLE;t++) {
+							System.arraycopy(blockBuffer, BYTES_OF_TUPLE*t, inputBuffer[i][tuples++], 0, BYTES_OF_TUPLE);
+						}
+						tuplesCount[i] = tuples;
+						if (tuples / TUPLES_OF_BLOCK == avgDistributedBlocks) {
+							break;
+						}
 					}
 				}
-
-				//write the smallest into output
-				out.write(smallest);
-				out.write('\n');
-				currentIndex[smallestIndex] += 1;
-
-				// if this buffer is empty
-				if(currentIndex[smallestIndex] == lengthOfBuffer[smallestIndex] && !eofFlag[smallestIndex]){
-					lengthOfBuffer[smallestIndex] = loadFile(inputBuffer[smallestIndex],mergeInput[smallestIndex]);
-					currentIndex[smallestIndex] = 0;
-
-					if(lengthOfBuffer[smallestIndex] == 0){		//end of the sublist
-						eofFlag[smallestIndex] = true;
-						endCounter++;
+				if(DEBUG) {
+					recordTime(startTime, outputPrefix + " phase 2-"+phase2FillCount+" time fill");
+					recordMemory(startMemory, outputPrefix + " phase 2-"+phase2FillCount+" time fill");
+				}
+				//Multi-way Merge
+				int thisSublist = 0;
+				fillSublist = false;
+				while (!fillSublist) {
+//					System.out.println(MAX_ID.length);
+//					!!System.arraycopy(MAX_ID, 0, outputBuffer[outputBufferOffset], 0, TUPLEBYTE);
+					outputBuffer[outputBufferOffset] = MAX_ID;
+					for (int j = 0; j < sublistCount; j++) {
+						if (sublistIndex[j] < tuplesCount[j] && compare(inputBuffer[j][sublistIndex[j]], outputBuffer[outputBufferOffset]) < 0) {
+//							System.out.println(sublistIndex[j] + "," + outputBufferOffset);
+//							!!System.arraycopy(inputBuffer[j][sublistIndex[j]], 0, outputBuffer[outputBufferOffset], 0, TUPLEBYTE);
+							outputBuffer[outputBufferOffset] = inputBuffer[j][sublistIndex[j]];
+							thisSublist = j;
+						}
+//						for (int i = 0; i < tuplesCount[j]; i++) {
+//							out.write(inputBuffer[j][i], 0, TUPLEBYTE - 1);
+//							out.write('\n');
+//						}
 					}
-
-					if(endCounter == sublistCount){
-						System.out.println("+++++++++++++++++++++++ END OF MERGE +++++++++++++++++++++++++++++++");
+					if(compare(outputBuffer[outputBufferOffset], MAX_ID) == 0) {
+						finish = true;
+					} else {
+						outputBufferOffset++;
+						sublistIndex[thisSublist]++;
+						if(sublistIndex[thisSublist] == tuplesCount[thisSublist]) {
+							if(readLength[thisSublist] != -1) {
+								sublistIndex[thisSublist] = 0;
+								tuplesCount[thisSublist] = 0;
+								fillSublist = true;							
+							}
+						}
+					}
+					//Be careful, outputBuffer store the reference of inputBuffer, save to file before overwrite the inputBuffer
+					if (outputBufferOffset == TUPLES_OF_BLOCK || fillSublist || finish) {
+						// write back
+						for (int i = 0; i < outputBufferOffset; i++) {
+							System.arraycopy(outputBuffer[i], 0, blockBuffer, BYTES_OF_TUPLE*i, BYTES_OF_TUPLE);
+						}
+						out.write(blockBuffer, 0, BYTES_OF_TUPLE*outputBufferOffset);
+						iocost++;
+						outputBufferOffset = 0;
+					}
+					if(finish) {
 						break;
 					}
-
 				}
-
-				//gc
-				smallest = null;
-				smallestIndex = 0;
-				System.gc();
+				phase2FillCount++;
+			}
+			out.close();
+			out = null;
+			for (int i = 0; i < sublistCount; i++) {
+				mergeInput[i].close();
+				mergeInput[i] = null;
 			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-
+		inputBuffer = null;
+		blockBuffer = null;
+		tuplesCount = null;
+		readLength = null;
+		mergeInput = null;
+		//merge
+		sublistIndex = null;
+		outputBuffer = null;
+		System.gc();
 	}
 
 	/**
@@ -218,7 +233,7 @@ public class RelationDiffByteCopy {
 	public static void compareDiff(String t1Prefix, String t2Prefix){
 		System.gc();
 
-		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNINGMEMORY_DIFF * K) / BLOCKSIZE);
+		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNING_MEMORY * K) / BLOCK_SIZE);
 		if(DEBUG) {
 			System.out.println("=========================== COMPARE DIFF ===========================");
 			System.out.println("Max Blocks to fill:"+inputBufferBlocks);
@@ -232,9 +247,9 @@ public class RelationDiffByteCopy {
 			int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / 2);
 
 			//t1
-			byte[][] t1Buffer = new byte[avgDistributedBlocks * TUPLESPB][TUPLEBYTE];
+			byte[][] t1Buffer = new byte[avgDistributedBlocks * TUPLES_OF_BLOCK][BYTES_OF_TUPLE];
 			//t2
-			byte[][] t2Buffer = new byte[avgDistributedBlocks * TUPLESPB][TUPLEBYTE];
+			byte[][] t2Buffer = new byte[avgDistributedBlocks * TUPLES_OF_BLOCK][BYTES_OF_TUPLE];
 
 			//record how much tuple in memory buffer
 			int lenOft1Buffer;
@@ -348,14 +363,14 @@ public class RelationDiffByteCopy {
 		}
 	}
 
-
-
-
-
-	public static void recordTime(long startTime, String function) {
+	public static void recordTime(long startTime, int divide, String function) {
 		long endTime = System.currentTimeMillis();
 		long duration = (endTime - startTime);
-		System.out.println(function + " time is:" + duration + " milliseconds");
+		System.out.println(function + " time is:" + duration/divide + " milliseconds");
+	}
+	
+	public static void recordTime(long startTime, String function) {
+		recordTime(startTime, 1, function);
 	}
 
 	public static void recordMemory(float start, String funciont) {
@@ -364,8 +379,7 @@ public class RelationDiffByteCopy {
 		System.out.println("Total Memory:" + Runtime.getRuntime().totalMemory() / (K * K) + "MB");
 		System.out.println("Free Memory:" + Runtime.getRuntime().freeMemory() / (K * K) + "MB\n");
 	}
-
-
+	
 	/**
 	 * compare the diff between ID of two tuple
 	 */

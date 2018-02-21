@@ -34,7 +34,7 @@ Enter next quicksort insertion parameter: 25
 Average time: 383
 
 */
-public class QuickSortTupleByte {
+public class QuickSort {
   public static int MAX_INSERTION_SORT = 25;  // parameter to tune for speed
   public static int compare(byte[] t1, byte[] t2) {
 		for (int i = 0; i < 8; i++) {
