@@ -1,7 +1,5 @@
 import java.io.FileInputStream;
 
-import org.junit.jupiter.api.Test;
-
 class RelationDiffTest {
 
 	private static void testFile(String file) {
@@ -28,15 +26,4 @@ class RelationDiffTest {
 			e.printStackTrace();
 		}
 	}
-
-	@Test
-	void test() {
-		testFile("t1_sorted.txt");
-	}
-
-	@Test
-	void test2() {
-		testFile("t2_sorted.txt");
-	}
-
 }

@@ -5,7 +5,7 @@ import java.util.Arrays;
 
 public class RelationDiff {
 
-	public static boolean DEBUG = false;
+	public static boolean DEBUG = true;
 	public static int MAX_TUPLES;
 	public static int MAX_BLOCKS;
 	public static final float K = 1024.0f;
@@ -28,14 +28,14 @@ public class RelationDiff {
 		}
 		MAX_BLOCKS = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNING_MEMORY * K) / BLOCK_SIZE);
 		MAX_TUPLES = TUPLES_OF_BLOCK * MAX_BLOCKS;
-		
+
 		long startTime = System.currentTimeMillis();
-		int t1SubLists = phaseOne("bag1.txt", "t1");
+		int t1SubLists = phaseOne("src/bag1.txt", "t1");
 		phaseTwo("t1", t1SubLists);
-		int t2SubLists = phaseOne("bag2.txt", "t2");
+		int t2SubLists = phaseOne("src/bag2.txt", "t2");
 		phaseTwo("t2", t2SubLists);
 		
-//		compareDiff("t1","t2");
+		compareDiff("t1","t2");
 		recordTime(startTime, "Total");
 		System.out.println("Total I/O Cost is:" + iocost + " times R/W");
 	}
@@ -232,6 +232,8 @@ public class RelationDiff {
 	 */
 	public static void compareDiff(String t1Prefix, String t2Prefix){
 		System.gc();
+		float startMemory = Runtime.getRuntime().freeMemory() / K;
+		long startTime = System.currentTimeMillis();
 
 		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNING_MEMORY * K) / BLOCK_SIZE);
 		if(DEBUG) {
@@ -245,7 +247,9 @@ public class RelationDiff {
 			FileOutputStream out = new FileOutputStream("result.txt");
 
 			int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / 2);
-
+			if(DEBUG){
+				System.out.println("Avg Distributed blocks:"+avgDistributedBlocks);
+			}
 			//t1
 			byte[][] t1Buffer = new byte[avgDistributedBlocks * TUPLES_OF_BLOCK][BYTES_OF_TUPLE];
 			//t2
@@ -271,7 +275,7 @@ public class RelationDiff {
 						currentT2++;
 					}
 					out.write(tempT2);
-					out.write((byte)0);
+					out.write(String.valueOf(0).getBytes());
 					out.write('\n');
 					tempT2 = null;
 				}
@@ -284,14 +288,13 @@ public class RelationDiff {
 						currentT1++;
 					}
 					out.write(tempT1);
-					out.write((byte)counter);
+					out.write(String.valueOf(counter).getBytes());
 					out.write('\n');
 
 					tempT1 = null;
 					counter = 0;
 				}
 				else{	//equal
-
 					if(isMaxByte(t1Buffer[currentT1])){
 						System.out.println("=========================== END OF COMPARE DIFF ===========================");
 						break;
@@ -315,9 +318,9 @@ public class RelationDiff {
 
 					out.write(tempT1);
 					if(counter1 > counter2){
-						out.write((byte)(counter1-counter2));
+						out.write(String.valueOf(counter1-counter2).getBytes());
 					}else{
-						out.write((byte)0);
+						out.write(String.valueOf(0).getBytes());
 					}
 					out.write('\n');
 
@@ -327,11 +330,8 @@ public class RelationDiff {
 					counter2 = 0;
 				}
 
-				//gc
-				System.gc();
-
 				//check exhausted buffer case
-				if(currentT1 == lenOft1Buffer){
+				if(currentT1 >= lenOft1Buffer){
 					lenOft1Buffer =loadFile(t1Buffer,ios1);
 					currentT1 = 0;
 
@@ -344,7 +344,7 @@ public class RelationDiff {
 					}
 				}
 
-				if(currentT2 == lenOft2Buffer){
+				if(currentT2 >= lenOft2Buffer){
 					lenOft2Buffer = loadFile(t2Buffer,ios2);
 					currentT2 = 0;
 
@@ -360,6 +360,11 @@ public class RelationDiff {
 
 		}catch (IOException e){
 			System.out.println(e.getMessage());
+		}
+
+		if(DEBUG) {
+			recordTime(startTime, " compare diff time fill");
+			recordMemory(startMemory, "compare diff time fill");
 		}
 	}
 
@@ -401,9 +406,9 @@ public class RelationDiff {
 		for(byte b:byt){
 			if(b != Byte.MAX_VALUE){
 				flag = false;
+				break;
 			}
 		}
-
 		return flag;
 	}
 
