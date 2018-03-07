@@ -35,9 +35,9 @@ public class RelationDiff {
 		MAX_TUPLES = TUPLES_OF_BLOCK * MAX_BLOCKS;
 
 		long startTime = System.currentTimeMillis();
-		int t1SubLists = phaseOne("src/bag1.txt", "t1");
+		int t1SubLists = phaseOne("src/demoBag1.txt", "t1");
 		phaseTwo("t1", t1SubLists);
-		int t2SubLists = phaseOne("src/bag2.txt", "t2");
+		int t2SubLists = phaseOne("src/demoBag2.txt", "t2");
 		phaseTwo("t2", t2SubLists);
 		
 		compareDiff("t1","t2");
@@ -257,7 +257,8 @@ public class RelationDiff {
 			FileInputStream ios2 = new FileInputStream(t2Prefix + "_sorted.txt");
 			FileOutputStream out = new FileOutputStream("result.txt");
 
-			int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / 2);
+			//int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / 2);
+			int avgDistributedBlocks = 10;
 			if(DEBUG){
 				System.out.println("Avg Distributed blocks:"+avgDistributedBlocks);
 			}
@@ -282,7 +283,7 @@ public class RelationDiff {
 			while (currentT1 < lenOft1Buffer && currentT2 < lenOft2Buffer){
 				if(compare(t1Buffer[currentT1], t2Buffer[currentT2]) > 0){
 					byte[] tempT2 = t2Buffer[currentT2];
-					currentT2 += 1;
+					//currentT2 += 1;
 					while (compare(tempT2,t2Buffer[currentT2]) == 0){
 						currentT2++;
 
@@ -310,8 +311,8 @@ public class RelationDiff {
 				}
 				else if(compare(t1Buffer[currentT1], t2Buffer[currentT2]) < 0){
 					byte[] tempT1 = t1Buffer[currentT1];
-					int counter = 1;
-					currentT1 += 1;
+					int counter = 0;
+					//currentT1 += 1;
 					while (compare(tempT1,t1Buffer[currentT1]) == 0){
 						counter++;
 						currentT1++;
@@ -347,8 +348,8 @@ public class RelationDiff {
 					}
 
 					byte[] tempT1 = t1Buffer[currentT1];
-					int counter1 = 1;
-					currentT1 += 1;
+					int counter1 = 0;
+					//currentT1 += 1;
 					while (compare(tempT1,t1Buffer[currentT1]) == 0){
 						counter1++;
 						currentT1++;
@@ -368,9 +369,9 @@ public class RelationDiff {
 					}
 
 					byte[] tempT2 = t2Buffer[currentT2];
-					int counter2 = 1;
-					currentT2 += 1;
-					while (currentT2 < lenOft2Buffer && compare(tempT2,t2Buffer[currentT2]) == 0){
+					int counter2 = 0;
+					//currentT2 += 1;
+					while (compare(tempT2,t2Buffer[currentT2]) == 0){
 						counter2++;
 						currentT2++;
 
@@ -524,7 +525,6 @@ public class RelationDiff {
 		byte[] numberByte = String.valueOf(writeNum).getBytes();
 		if (outputBuffer.length - outputPointer - 1 < numberByte.length + extraLength + BYTES_OF_TUPLE) {        //save to file
 			try {
-				System.out.println("write to block");
 				out.write(outputBuffer, 0, outputPointer + 1);
 				iocost++;
 				outputPointer = 0;
