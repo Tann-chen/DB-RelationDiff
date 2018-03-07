@@ -14,8 +14,13 @@ public class RelationDiff {
 	public static final int BLOCK_SIZE = TUPLES_OF_BLOCK * BYTES_OF_TUPLE;// one block has 40 tuples, 101byte for one tuple
 	public static final byte[] MAX_ID = "99999999Lelia     Lopez     110008560319893Peep Key,Neffini,YT,X0B 0J4                              \n".getBytes();
 	public static float RUNNING_MEMORY = 1024; // kb
-
 	public static int iocost = 0;
+
+	public static byte[] extra1 = "(".getBytes();
+	public static byte[] extra2 = ",".getBytes();
+	public static byte[] extra3 = ")\n".getBytes();
+	public static int extraLength = extra1.length + extra2.length + extra3.length;
+
 	
 	public static void main(String[] args) {
 		System.out.println("Total Memory:" + Runtime.getRuntime().totalMemory() / (K * K) + "MB");
@@ -139,6 +144,7 @@ public class RelationDiff {
 			int phase2FillCount = 0;
 			FileOutputStream out = new FileOutputStream(outputPrefix + "_sorted.txt");
 			while(!finish) {
+				//first loading
 				for (int i = 0; i < sublistCount; i++) {
 					if(tuplesCount[i] != 0 || readLength[i] == -1) {
 						continue;
@@ -232,10 +238,15 @@ public class RelationDiff {
 	 */
 	public static void compareDiff(String t1Prefix, String t2Prefix){
 		System.gc();
+		float runtimeMemoryParam = 0.5f;   // less than 1
 		float startMemory = Runtime.getRuntime().freeMemory() / K;
 		long startTime = System.currentTimeMillis();
 
-		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNING_MEMORY * K) / BLOCK_SIZE);
+		byte[] outputBuffer = new byte[TUPLES_OF_BLOCK * BYTES_OF_TUPLE];
+		byte[] blockBuffer = new byte[TUPLES_OF_BLOCK * BYTES_OF_TUPLE];
+
+		int inputBufferBlocks = (int) Math.floor((Runtime.getRuntime().freeMemory() - RUNNING_MEMORY * K) / BLOCK_SIZE * runtimeMemoryParam);
+
 		if(DEBUG) {
 			System.out.println("=========================== COMPARE DIFF ===========================");
 			System.out.println("Max Blocks to fill:"+inputBufferBlocks);
@@ -260,52 +271,100 @@ public class RelationDiff {
 			int lenOft2Buffer;
 
 			//first load
-			lenOft1Buffer = loadFile(t1Buffer,ios1);
-			lenOft2Buffer = loadFile(t2Buffer,ios2);
+			lenOft1Buffer = loadFile(t1Buffer,blockBuffer,ios1);
+			lenOft2Buffer = loadFile(t2Buffer,blockBuffer,ios2);
 
 			//compare
 			int currentT1 = 0;	   //pointer
 			int currentT2 = 0;
+			int outputPointer = 0;
 
 			while (currentT1 < lenOft1Buffer && currentT2 < lenOft2Buffer){
 				if(compare(t1Buffer[currentT1], t2Buffer[currentT2]) > 0){
 					byte[] tempT2 = t2Buffer[currentT2];
 					currentT2 += 1;
-					while (currentT2 < lenOft2Buffer && compare(tempT2,t2Buffer[currentT2]) == 0){
+					while (compare(tempT2,t2Buffer[currentT2]) == 0){
 						currentT2++;
+
+						if(currentT2 == lenOft2Buffer){
+							lenOft2Buffer = loadFile(t2Buffer,blockBuffer,ios2);
+							currentT2 = 0;
+
+							//trick
+							if(lenOft2Buffer < t2Buffer.length){
+								byte[] biggest = new byte[100];
+								Arrays.fill(biggest,Byte.MAX_VALUE);
+								t2Buffer[lenOft2Buffer] = biggest;
+								lenOft2Buffer += 1;
+							}
+						}
 					}
-					out.write(tempT2);
-					out.write(String.valueOf(0).getBytes());
-					out.write('\n');
+
+//					out.write(tempT2);
+//					out.write(String.valueOf(0).getBytes());
+//					out.write('\n');
+					outputPointer = writeFile(outputBuffer,outputPointer,tempT2,0,out);
 					tempT2 = null;
+
+
 				}
 				else if(compare(t1Buffer[currentT1], t2Buffer[currentT2]) < 0){
 					byte[] tempT1 = t1Buffer[currentT1];
 					int counter = 1;
 					currentT1 += 1;
-					while (currentT1 < lenOft1Buffer && compare(tempT1,t1Buffer[currentT1]) == 0){
+					while (compare(tempT1,t1Buffer[currentT1]) == 0){
 						counter++;
 						currentT1++;
-					}
-					out.write(tempT1);
-					out.write(String.valueOf(counter).getBytes());
-					out.write('\n');
 
+						if(currentT1 == lenOft1Buffer){
+							lenOft1Buffer =loadFile(t1Buffer,blockBuffer,ios1);
+							currentT1 = 0;
+
+							//trick
+							if(lenOft1Buffer < t1Buffer.length){		//end of file
+								byte[] biggest = new byte[100];
+								Arrays.fill(biggest,Byte.MAX_VALUE);
+								t1Buffer[lenOft1Buffer] = biggest;
+								lenOft1Buffer += 1;
+							}
+						}
+					}
+//					out.write(tempT1);
+//					out.write(String.valueOf(counter).getBytes());
+//					out.write('\n');
+					outputPointer = writeFile(outputBuffer,outputPointer,tempT1,counter,out);
 					tempT1 = null;
 					counter = 0;
 				}
 				else{	//equal
 					if(isMaxByte(t1Buffer[currentT1])){
 						System.out.println("=========================== END OF COMPARE DIFF ===========================");
+
+						//write final output buffer to file
+						out.write(outputBuffer,0,outputPointer+1);
+						iocost++;
 						break;
 					}
 
 					byte[] tempT1 = t1Buffer[currentT1];
 					int counter1 = 1;
 					currentT1 += 1;
-					while (currentT1 < lenOft1Buffer && compare(tempT1,t1Buffer[currentT1]) == 0){
+					while (compare(tempT1,t1Buffer[currentT1]) == 0){
 						counter1++;
 						currentT1++;
+
+						if(currentT1 == lenOft1Buffer){
+							lenOft1Buffer = loadFile(t1Buffer,blockBuffer,ios1);
+							currentT1 = 0;
+
+							//trick
+							if(lenOft1Buffer < t1Buffer.length){		//end of file
+								byte[] biggest = new byte[100];
+								Arrays.fill(biggest,Byte.MAX_VALUE);
+								t1Buffer[lenOft1Buffer] = biggest;
+								lenOft1Buffer += 1;
+							}
+						}
 					}
 
 					byte[] tempT2 = t2Buffer[currentT2];
@@ -314,15 +373,30 @@ public class RelationDiff {
 					while (currentT2 < lenOft2Buffer && compare(tempT2,t2Buffer[currentT2]) == 0){
 						counter2++;
 						currentT2++;
+
+						if(currentT2 == lenOft2Buffer){
+							lenOft2Buffer = loadFile(t2Buffer,blockBuffer,ios2);
+							currentT2 = 0;
+
+							//trick
+							if(lenOft2Buffer < t2Buffer.length){
+								byte[] biggest = new byte[100];
+								Arrays.fill(biggest,Byte.MAX_VALUE);
+								t2Buffer[lenOft2Buffer] = biggest;
+								lenOft2Buffer += 1;
+							}
+						}
 					}
 
-					out.write(tempT1);
+//					out.write(tempT1);
 					if(counter1 > counter2){
-						out.write(String.valueOf(counter1-counter2).getBytes());
+//						out.write(String.valueOf(counter1-counter2).getBytes());
+						outputPointer = writeFile(outputBuffer,outputPointer,tempT1,counter1-counter2,out);
 					}else{
-						out.write(String.valueOf(0).getBytes());
+//						out.write(String.valueOf(0).getBytes());
+						outputPointer = writeFile(outputBuffer,outputPointer,tempT1,0,out);
 					}
-					out.write('\n');
+//					out.write('\n');
 
 					tempT1 = null;
 					tempT2 = null;
@@ -330,9 +404,10 @@ public class RelationDiff {
 					counter2 = 0;
 				}
 
+				/*
 				//check exhausted buffer case
 				if(currentT1 >= lenOft1Buffer){
-					lenOft1Buffer =loadFile(t1Buffer,ios1);
+					lenOft1Buffer =loadFile(t1Buffer,blockBuffer,ios1);
 					currentT1 = 0;
 
 					//trick
@@ -345,7 +420,7 @@ public class RelationDiff {
 				}
 
 				if(currentT2 >= lenOft2Buffer){
-					lenOft2Buffer = loadFile(t2Buffer,ios2);
+					lenOft2Buffer = loadFile(t2Buffer,blockBuffer,ios2);
 					currentT2 = 0;
 
 					//trick
@@ -356,14 +431,19 @@ public class RelationDiff {
 						lenOft2Buffer += 1;
 					}
 				}
+				*/
 			}
+
+			ios1.close();
+			ios2.close();
+			out.close();
 
 		}catch (IOException e){
 			System.out.println(e.getMessage());
 		}
 
 		if(DEBUG) {
-			recordTime(startTime, " compare diff time fill");
+			recordTime(startTime, "compare diff time fill");
 			recordMemory(startMemory, "compare diff time fill");
 		}
 	}
@@ -417,16 +497,58 @@ public class RelationDiff {
 	/**
 	 *  return the length of tuple in memory buffer, return 0 if end of file
 	 */
-	public static int loadFile(byte[][] buffer, FileInputStream ios) throws IOException{
-		int eof = 0;
+	public static int loadFile(byte[][] buffer, byte[] blockBuffer, FileInputStream ios) throws IOException {
+		int readLength = 0;
 		int i = 0;
-		for(; i<buffer.length; i++){
-			if(eof == -1){
+		int lineOfBuffer = 0;
+
+		while (i < buffer.length){    //buffer.length = max length of tuple in buffer
+			readLength = ios.read(blockBuffer);
+			if(readLength == -1){
 				break;
 			}
-			eof = ios.read(buffer[i]);
+			iocost++;
+			i += (readLength / BYTES_OF_TUPLE);
+
+			for(int t=0; t<readLength/BYTES_OF_TUPLE; t++) {
+				System.arraycopy(blockBuffer, BYTES_OF_TUPLE*t, buffer[lineOfBuffer++], 0, BYTES_OF_TUPLE);
+			}
 		}
 
 		return i;
+	}
+
+
+	public static int writeFile(byte[] outputBuffer, int outputPointer, byte[] tuple, int writeNum, FileOutputStream out) {
+
+		byte[] numberByte = String.valueOf(writeNum).getBytes();
+		if (outputBuffer.length - outputPointer - 1 < numberByte.length + extraLength + BYTES_OF_TUPLE) {        //save to file
+			try {
+				System.out.println("write to block");
+				out.write(outputBuffer, 0, outputPointer + 1);
+				iocost++;
+				outputPointer = 0;
+			} catch (IOException e) {
+				System.out.println(e.getMessage());
+			}
+		}
+
+		//copy data
+		System.arraycopy(extra1, 0, outputBuffer, outputPointer, extra1.length);
+		outputPointer += extra1.length;
+
+		System.arraycopy(tuple, 0, outputBuffer, outputPointer, BYTES_OF_TUPLE-1);
+		outputPointer += (BYTES_OF_TUPLE-1);
+
+		System.arraycopy(extra2, 0, outputBuffer, outputPointer, extra2.length);
+		outputPointer += extra2.length;
+
+		System.arraycopy(numberByte, 0, outputBuffer, outputPointer, numberByte.length);
+		outputPointer += numberByte.length;
+
+		System.arraycopy(extra3, 0, outputBuffer, outputPointer, extra3.length);
+		outputPointer += extra3.length;
+
+		return outputPointer;
 	}
 }
