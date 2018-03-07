@@ -257,8 +257,8 @@ public class RelationDiff {
 			FileInputStream ios2 = new FileInputStream(t2Prefix + "_sorted.txt");
 			FileOutputStream out = new FileOutputStream("result.txt");
 
-			//int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / 2);
-			int avgDistributedBlocks = 10;
+			int avgDistributedBlocks = (int) Math.floor(inputBufferBlocks / 2);
+
 			if(DEBUG){
 				System.out.println("Avg Distributed blocks:"+avgDistributedBlocks);
 			}
