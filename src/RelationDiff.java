@@ -35,14 +35,17 @@ public class RelationDiff {
 		MAX_TUPLES = TUPLES_OF_BLOCK * MAX_BLOCKS;
 
 		long startTime = System.currentTimeMillis();
-		int t1SubLists = phaseOne("src/demoBag1.txt", "t1");
+		int t1SubLists = phaseOne("C:\\Users\\du_zhen\\Downloads\\demoBag1.txt", "t1");
+		int t2SubLists = phaseOne("C:\\Users\\du_zhen\\Downloads\\demoBag2.txt", "t2");
+		System.out.println("The number of sublists for T1 is:" + t1SubLists);
+		System.out.println("The number of sublists for T2 is:" + t2SubLists);
+		System.out.println("The I/O in phase1:" + iocost);
+		recordTime(startTime, "The execute time for phase1");
 		phaseTwo("t1", t1SubLists);
-		int t2SubLists = phaseOne("src/demoBag2.txt", "t2");
 		phaseTwo("t2", t2SubLists);
-		
 		compareDiff("t1","t2");
-		recordTime(startTime, "Total");
 		System.out.println("Total I/O Cost is:" + iocost + " times R/W");
+		recordTime(startTime, "Total");
 	}
 	
 	/**
@@ -81,10 +84,11 @@ public class RelationDiff {
 						lineCount++;
 						if(lineCount%TUPLES_OF_BLOCK == 0) {
 							out.write(blockBuffer, 0, BYTES_OF_TUPLE*TUPLES_OF_BLOCK);
+							iocost++;
 						} else if(lineCount == lines) {
 							out.write(blockBuffer, 0, BYTES_OF_TUPLE*(lineCount%TUPLES_OF_BLOCK));
+							iocost++;
 						}
-						iocost++;
 					}
 					lines = 0;
 					out.close();
