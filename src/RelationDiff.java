@@ -482,6 +482,7 @@ public class RelationDiff {
 		return i;
 	}
 
+	
 
 	public static int writeFile(byte[] outputBuffer, int outputPointer, byte[] tuple, int writeNum, FileOutputStream out) {
 
