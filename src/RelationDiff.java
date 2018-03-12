@@ -467,13 +467,13 @@ public class RelationDiff {
 			if(readLength == -1){
 				break;
 			}
-			iocost++;
 			i += (readLength / BYTES_OF_TUPLE);
 
 			for(int t=0; t<readLength/BYTES_OF_TUPLE; t++) {
 				System.arraycopy(blockBuffer, BYTES_OF_TUPLE*t, buffer[lineOfBuffer++], 0, BYTES_OF_TUPLE);
 			}
 		}
+		iocost++;
 
 		return i;
 	}
